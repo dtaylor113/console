@@ -6,7 +6,12 @@ import { Perspective, useExtensions, isPerspective } from '@console/plugin-sdk';
 import { RootState } from '../../redux';
 import { featureReducerName, getFlagsObject, FlagsObject } from '../../reducers/features';
 import { history } from '../utils';
-import { useActivePerspective } from '@console/shared';
+import { useActivePerspective, ACM_LINK_ID } from '@console/shared';
+import { K8sResourceKind, referenceForModel } from '../../module/k8s';
+import { ConsoleLinkModel } from '../../models';
+import { useK8sWatchResource } from '../utils/k8s-watch-hook';
+import { useTranslation } from 'react-i18next';
+import * as acmIcon from '../../imgs/ACM-icon.svg';
 
 type StateProps = {
   flags: FlagsObject;
@@ -20,6 +25,12 @@ const NavHeader_: React.FC<NavHeaderProps & StateProps> = ({ onPerspectiveSelect
   const [activePerspective, setActivePerspective] = useActivePerspective();
   const [isPerspectiveDropdownOpen, setPerspectiveDropdownOpen] = React.useState(false);
   const perspectiveExtensions = useExtensions<Perspective>(isPerspective);
+  const [acmLink] = useK8sWatchResource<K8sResourceKind>({
+    kind: referenceForModel(ConsoleLinkModel),
+    name: ACM_LINK_ID,
+    optional: true,
+  });
+  const { t } = useTranslation();
   const togglePerspectiveOpen = React.useCallback(() => {
     setPerspectiveDropdownOpen(!isPerspectiveDropdownOpen);
   }, [isPerspectiveDropdownOpen]);
@@ -55,25 +66,46 @@ const NavHeader_: React.FC<NavHeaderProps & StateProps> = ({ onPerspectiveSelect
     [isPerspectiveDropdownOpen, togglePerspectiveOpen],
   );
 
-  const perspectiveItems = React.useMemo(
-    () =>
-      perspectiveExtensions.map((nextPerspective: Perspective) => (
+  const perspectiveItems = React.useMemo(() => {
+    const items = perspectiveExtensions.map((nextPerspective: Perspective) => (
+      <DropdownItem
+        key={nextPerspective.properties.id}
+        onClick={(event: React.MouseEvent<HTMLLinkElement>) =>
+          onPerspectiveSelect(event, nextPerspective)
+        }
+        isHovered={nextPerspective.properties.id === activePerspective}
+      >
+        <Title headingLevel="h2" size="md" data-test-id="perspective-switcher-menu-option">
+          <span className="oc-nav-header__icon">{nextPerspective.properties.icon}</span>
+          {nextPerspective.properties.name}
+        </Title>
+      </DropdownItem>
+    ));
+    if (acmLink) {
+      items.push(
         <DropdownItem
-          key={nextPerspective.properties.id}
-          onClick={(event: React.MouseEvent<HTMLLinkElement>) =>
-            onPerspectiveSelect(event, nextPerspective)
-          }
-          isHovered={nextPerspective.properties.id === activePerspective}
-          component="button"
+          key={ACM_LINK_ID}
+          onClick={() => {
+            window.location.href = acmLink.spec.href;
+          }}
+          isHovered={ACM_LINK_ID === activePerspective}
         >
           <Title headingLevel="h2" size="md" data-test-id="perspective-switcher-menu-option">
-            <span className="oc-nav-header__icon">{nextPerspective.properties.icon}</span>
-            {nextPerspective.properties.name}
+            <span className="oc-nav-header__icon">
+              <img
+                src={acmIcon}
+                height="12em"
+                width="12em"
+                alt="Advanced Cluster Management icon"
+              />
+            </span>
+            {t('public~Advanced Cluster Management')}
           </Title>
-        </DropdownItem>
-      )),
-    [activePerspective, onPerspectiveSelect, perspectiveExtensions],
-  );
+        </DropdownItem>,
+      );
+    }
+    return items;
+  }, [acmLink, activePerspective, onPerspectiveSelect, perspectiveExtensions, t]);
 
   const { icon, name } = React.useMemo(
     () => perspectiveExtensions.find((p) => p.properties.id === activePerspective).properties,
